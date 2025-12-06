@@ -1,7 +1,7 @@
 const express = require('express');
 const app = express();
 const userModel = require("./models/user");
-const postModel = require("./models/post");
+const postModel = require("./models/post"); // kept for future use
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -24,7 +24,7 @@ app.post('/register', async (req, res) => {
   let { email, password, username, name, age } = req.body;
 
   let user = await userModel.findOne({ email });
-  if (user) return res.status(500).send("User alraedy registered");
+  if (user) return res.status(500).send("User already registered");
 
   bcrypt.genSalt(10, (err, salt) => {
     bcrypt.hash(password, salt, async (err, hash) => {
@@ -53,7 +53,7 @@ app.post('/login', async (req, res) => {
     if (result) {
       let token = jwt.sign({ email: email, userid: user._id }, "shh");
       res.cookie("token", token);
-      res.status(200).send("you can login");  // ✅ fixed
+      res.status(200).redirect("/profile");
     } else {
       res.redirect("/login");
     }
@@ -65,14 +65,34 @@ app.get('/logout', (req, res) => {
   res.redirect("/login");
 });
 
-app.post('/profile', isLoggedIn, (req, res) => {
-  console.log(req.user);
-  res.render("login");
+// ✅ profile should be GET, because you redirect to "/profile"
+app.get('/profile', isLoggedIn, async (req, res) => {
+  let user = await userModel
+    .findOne({ email: req.user.email })
+    .populate("posts");
+
+  res.render("profile", { user });
+});
+
+// create post
+app.post('/post', isLoggedIn, async (req, res) => {
+  let user = await userModel.findOne({ email: req.user.email });
+  let content = req.body.content;          // ✅ get textarea "content"
+
+  let post = await postModel.create({
+    user: user._id,
+    content: content
+  });
+
+  user.posts.push(post._id);
+  await user.save();
+
+  res.redirect("/profile");                // ✅ call redirect correctly
 });
 
 function isLoggedIn(req, res, next) {
-  if (!req.cookies.token) {          // ✅ safer check
-    res.send("You must be logged in");
+  if (!req.cookies.token) {
+    res.redirect("/login");
   } else {
     let data = jwt.verify(req.cookies.token, "shh");
     req.user = data;
