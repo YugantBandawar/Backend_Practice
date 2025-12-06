@@ -1,7 +1,7 @@
 const express = require('express');
 const app = express();
 const userModel = require("./models/user");
-const postModel = require("./models/post"); // kept for future use
+const postModel = require("./models/post");
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -65,7 +65,7 @@ app.get('/logout', (req, res) => {
   res.redirect("/login");
 });
 
-// ✅ profile should be GET, because you redirect to "/profile"
+// profile page
 app.get('/profile', isLoggedIn, async (req, res) => {
   let user = await userModel
     .findOne({ email: req.user.email })
@@ -74,10 +74,47 @@ app.get('/profile', isLoggedIn, async (req, res) => {
   res.render("profile", { user });
 });
 
+// like / unlike post
+app.get('/like/:id', isLoggedIn, async (req, res) => {
+  let post = await postModel
+    .findOne({ _id: req.params.id })
+    .populate("user");
+
+  if (post.likes.indexOf(req.user.userid) === -1) {
+    post.likes.push(req.user.userid);
+  } else {
+    post.likes.splice(post.likes.indexOf(req.user.userid), 1);
+  }
+
+  await post.save();
+
+  // important: redirect to /profile, not "profile"
+  res.redirect("/profile");
+});
+
+// edit post page
+app.get('/edit/:id', isLoggedIn, async (req, res) => {
+  let post = await postModel
+    .findOne({ _id: req.params.id })
+    .populate("user");
+
+  res.render("edit", { post });
+});
+
+// update post
+app.post('/update/:id', isLoggedIn, async (req, res) => {
+  await postModel.findOneAndUpdate(
+    { _id: req.params.id },
+    { content: req.body.content }
+  );
+
+  res.redirect("/profile");
+});
+
 // create post
 app.post('/post', isLoggedIn, async (req, res) => {
   let user = await userModel.findOne({ email: req.user.email });
-  let content = req.body.content;          // ✅ get textarea "content"
+  let content = req.body.content;
 
   let post = await postModel.create({
     user: user._id,
@@ -87,7 +124,7 @@ app.post('/post', isLoggedIn, async (req, res) => {
   user.posts.push(post._id);
   await user.save();
 
-  res.redirect("/profile");                // ✅ call redirect correctly
+  res.redirect("/profile");
 });
 
 function isLoggedIn(req, res, next) {
